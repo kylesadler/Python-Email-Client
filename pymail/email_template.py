@@ -1,5 +1,5 @@
 import os
-from util import get_logger, render_template, assert_string, assert_string_list, clean_html
+from .util import get_logger, render_template, assert_string, assert_string_list, clean_html
 
 logger = get_logger(__name__)
 

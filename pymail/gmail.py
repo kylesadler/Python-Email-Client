@@ -1,5 +1,5 @@
 import os
-from util import get_logger, to_mimes, to_mime, connect
+from .util import get_logger, to_mimes, to_mime, connect
 from pprint import pformat
 from traceback import format_exc
 from email_template import Email

@@ -1,7 +1,8 @@
-from gmail import Gmail
-from getpass import getpass
 from pprint import pprint
-# from email_template import Email
+from getpass import getpass
+
+from pymail import Gmail
+
 
 def main():
     username = input("Enter username: ")
