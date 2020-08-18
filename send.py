@@ -11,8 +11,37 @@ from pymail.util.at_util.db import get_db, get_county_type, all_fields_exist
 
 logger = get_logger(__name__)
 
-testing = False
-# testing = True
+# testing = False
+testing = True
+
+
+def get_new_farms(db, query):
+    farms = []
+
+    for farm in db.find(query):
+        
+        # pass over farms older than 1 day
+        # note: this won't work because different timezone on db server
+        print(farm['_id'].generation_time)
+        if farm['_id'].generation_time < int(datetime.now().strftime("%s")) - 60*60*24:
+            continue
+
+        required_fields = ['url', 'state', 'county', 'price', 'acres']
+        if not all_fields_exist(required_fields, farm):
+            logger.error(f"farm missing one of {required_fields}:\n{pformat(farm)}")
+            continue
+
+        state = parse_state(farm['state'])
+
+        farms.append({
+            'title': farm['title'] if 'title' in farm else 'Untitled Listing',
+            'url': farm['url'],
+            'price': '${:0,.2f}'.format(farm['price']),
+            'acres': farm['acres'],
+            'location': f'{farm["county"]} {get_county_type(state)}, {state}',
+        })
+
+    return farms
 
 
 def main():
@@ -22,14 +51,11 @@ def main():
 
     gmail = Gmail(username, password, testing)
     
-    # contacts = [ {
-    #     'email': 'grant@acretrader.com',
-    #     'name': 'Grant'
-    # }]
-
     contacts = [{
         'email': 'krs028@uark.edu',
-        'name' : 'Kyle'
+        'name' : 'Kyle',
+        # 'email': 'grant@acretrader.com',
+        # 'name': 'Grant',
         'subscribed_sites': [
             'wingertrealty.com',
             'thefarmagency.com',
@@ -51,63 +77,34 @@ def main():
         ]
     }]
 
-    DATE = datetime.now().strftime("%B %d, %Y")
 
     scraper_db = MongoDBTunnel(ip, ssh_user, ssh_pkey, ssh_user, ssh_pass)['scraper']
-
-    # FARMS, raw_data = get_farms(scraper_db)
-
-    raw_data = []
-    FARMS = []
-
-    for farm in scraper_db.find():
-        
-        required_fields = ['url', 'state', 'county', 'price', 'acres']
-        if not all_fields_exist(required_fields, farm):
-            logger.error(f"farm missing one of {required_fields}:\n{pformat(farm)}")
-            continue
-
-        # pass over farms older than 1 day
-        # note: this won't work because different timezone on db server
-        if farm['_id'].generation_time < int(datetime.now().strftime("%s")) - 60*60*24:
-            continue
-
-        state = parse_state(farm['state'])
-
-        raw_data.append(farm)
-        FARMS.append({
-            'title': farm['title'] if 'title' in farm else 'Untitled Listing',
-            'url': farm['url'],
-            'price': '${:0,.2f}'.format(farm['price']),
-            'acres': farm['acres'],
-            'location': f'{farm["county"]} {get_county_type(state)}, {state}',
-        })
-
-
-    NUM_FARMS = len(FARMS)
-
-    if NUM_FARMS == 0:
-        logger.info('no farms found. Exiting...')
-        return
-
-    ALL_LISTINGS_URL = "http://comptool.acretrader.com/listing-alerts"
-
-
-    template = EmailTemplate(
-        os.path.join(os.path.dirname(__file__), 'alert.html'), 
-        subject=f"{NUM_FARMS} new Farms! {DATE} Farm Listing Alerts", 
-        cc = [username]
-    )
-
+    date = datetime.now().strftime("%B %d, %Y")
+    more_listings_url = "http://comptool.acretrader.com/listing-alerts"
 
     emails = []
     for contact in contacts:
+        query = {} # this is personalized
+        farms = get_new_farms(scraper_db, query) # TODO fix this
+
+        num_farms = len(farms)
+
+        if num_farms == 0:
+            logger.info(f'no farms found for {contact["email"]}. Skipping...')
+            continue
+
+        template = EmailTemplate(
+            os.path.join(os.path.dirname(__file__), 'alert.html'), 
+            subject=f"{num_farms} new Farms! {date} Farm Listing Alerts", 
+            cc = [username]
+        )
+
         emails.append(template.fill(
             template_args={
                 'NAME': contact['name'],
-                'DATE': DATE,
-                'FARMS': FARMS,
-                'ALL_LISTINGS_URL': ALL_LISTINGS_URL
+                'DATE': date,
+                'FARMS': farms,
+                'URL': more_listings_url
             },
             to=contact['email']
         ))
@@ -117,7 +114,6 @@ def main():
     for i, x in enumerate(gmail.send(emails)):
         if not x:
             logger.error(f'alert not sent to: {emails[i].to}')
-
 
 
 if __name__ == '__main__':
