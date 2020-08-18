@@ -1,0 +1,16 @@
+<html>
+<p style="font-size:13px">
+{{NAME}},<br>
+<br>
+Here are new property listings from {{DATE}}:<br>
+<ul>{% for farm in FARMS %} <li>
+    <a href="{{ farm.url }}">{{ farm.title }}</a><br>
+    {{ farm.acres }} acres for {{ farm.price }} in {{ farm.location }}
+</li> {% endfor %} </ul><br>
+<br>
+View all new listings <a href="{{ALL_LISTINGS_URL}}" target="_blank">here</a>.<br>
+<br>
+Best,<br>
+Your email alert Bot<br>
+</p>
+</html>
