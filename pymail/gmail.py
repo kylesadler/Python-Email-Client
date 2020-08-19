@@ -2,7 +2,7 @@ import os
 from .util import get_logger, to_mimes, to_mime, connect
 from pprint import pformat
 from traceback import format_exc
-from email_template import Email
+from .email_template import Email
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage

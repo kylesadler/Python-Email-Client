@@ -1,29 +1,101 @@
 import os
 import getpass
 import functools
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pprint import pprint, pformat
 
 from pymail import Gmail, EmailTemplate
 from pymail.util import get_logger, print_emails
-from pymail.util.at_util.clean_parse import clean_html, parse_state
-from pymail.util.at_util.db import get_db, get_county_type, all_fields_exist
+from pymail.util.at_util.clean_parse import clean_html, parse_state, get_county_type
+from pymail.util.at_util.db import all_fields_exist
+from pymail.util.at_util import MongoDBTunnel
 
 logger = get_logger(__name__)
 
-# testing = False
-testing = True
+# TESTING = False
+TESTING = True
 
 
-def get_new_farms(db, query):
-    farms = []
+def main():
+    
+    scraper_farms = get_farms()
+    username, gmail = login_gmail()
 
-    for farm in db.find(query):
+    template = EmailTemplate(
+        os.path.join(os.path.dirname(__file__), 'alert.html'), 
+        cc = [username],
+        template_args={ 'URL': "http://comptool.acretrader.com/listing-alerts" }
+    )
+
+    alert_sites = [
+        'wingertrealty.com',
+        'thefarmagency.com',
+        'mgw.us.com',
+        'bigfarms.com',
+        'halderman.com',
+        'hagemanrealty.com',
+        'prairiefarmland.com',
+        'firstmidag.com',
+        'kingrealestatear.com',
+        'glaubfm.com',
+        'schraderauction.com',
+        'sterlinglandcompany.com',
+        'rutledgeinvestment.com',
+        'wellonsland.com',
+        'iowafarmlandbroker.com',
+        'landprollc.us',
+        'roosterag.com'
+    ]
+
+    contacts = [{
+        'email': 'krs028@uark.edu',
+        'name' : 'Kyle',
+        # 'email': 'grant@acretrader.com',
+        # 'name': 'Grant',
+        'alert_sites': alert_sites,
+    }]
+
+    # get CST date
+    # technically this doesn't account for daylight savings time, but it's probably fine
+    current_date = datetime.now(timezone(timedelta(hours=-6))).strftime("%B %d, %Y")
+    current_time = datetime.now(timezone.utc) # get UTC timestamp
+
+    emails = []
+    for contact in contacts:
+        alerts = get_alerts(scraper_farms, current_time, contact['alert_sites'])
+
+        if len(alerts) == 0:
+            logger.info(f'no new alerts found for {contact["email"]}. Skipping...')
+        else:
+            emails.append(create_email(contact, template, current_date, alerts))
+    
+    if TESTING:
+        print_emails(emails)
+
+    send_emails(emails, gmail)
+
+
+
+
+def get_query(alert_sites): # TODO check this
+    """ given a list of sites, return a mongodb query to find farms from those sites """
+    query = { "$or" : [{ "url" : { "$regex": site } } for site in alert_sites] }
+    logger.info(f'querying {query}')
+    return query
+
+
+def get_alerts(collection, current_time, alert_sites):
+    """ returns a list of dictionaries corresponding to farms scraped less than 1 day before current_time
+        collection is open MongoDB collection of farms
+        current_time is the current UTC time in a datetime object
+        alert_sites is a list of websites to get new farms from
+    """
+    alerts = []
+
+    for farm in collection.find(get_query(alert_sites)):
         
-        # pass over farms older than 1 day
-        # note: this won't work because different timezone on db server
-        print(farm['_id'].generation_time)
-        if farm['_id'].generation_time < int(datetime.now().strftime("%s")) - 60*60*24:
+        # pass over farms older than 1 day based on 
+        if (current_time - farm['_id'].generation_time).days > 0:
             continue
 
         required_fields = ['url', 'state', 'county', 'price', 'acres']
@@ -32,8 +104,7 @@ def get_new_farms(db, query):
             continue
 
         state = parse_state(farm['state'])
-
-        farms.append({
+        alerts.append({
             'title': farm['title'] if 'title' in farm else 'Untitled Listing',
             'url': farm['url'],
             'price': '${:0,.2f}'.format(farm['price']),
@@ -41,79 +112,44 @@ def get_new_farms(db, query):
             'location': f'{farm["county"]} {get_county_type(state)}, {state}',
         })
 
-    return farms
+    return alerts
 
 
-def main():
-    
-    username = os.environ.get('ALERT_USERNAME') or input("Enter username: ")
-    password = os.environ.get('ALERT_PASSWORD') or getpass.getpass(f'Enter password for {username}: ')
-
-    gmail = Gmail(username, password, testing)
-    
-    contacts = [{
-        'email': 'krs028@uark.edu',
-        'name' : 'Kyle',
-        # 'email': 'grant@acretrader.com',
-        # 'name': 'Grant',
-        'subscribed_sites': [
-            'wingertrealty.com',
-            'thefarmagency.com',
-            'mgw.us.com',
-            'bigfarms.com',
-            'halderman.com',
-            'hagemanrealty.com',
-            'prairiefarmland.com',
-            'firstmidag.com',
-            'kingrealestatear.com',
-            'glaubfm.com',
-            'schraderauction.com',
-            'sterlinglandcompany.com',
-            'rutledgeinvestment.com',
-            'wellonsland.com',
-            'iowafarmlandbroker.com',
-            'landprollc.us',
-            'roosterag.com'
-        ]
-    }]
-
-
-    scraper_db = MongoDBTunnel(ip, ssh_user, ssh_pkey, ssh_user, ssh_pass)['scraper']
-    date = datetime.now().strftime("%B %d, %Y")
-    more_listings_url = "http://comptool.acretrader.com/listing-alerts"
-
-    emails = []
-    for contact in contacts:
-        query = {} # this is personalized
-        farms = get_new_farms(scraper_db, query) # TODO fix this
-
-        num_farms = len(farms)
-
-        if num_farms == 0:
-            logger.info(f'no farms found for {contact["email"]}. Skipping...')
-            continue
-
-        template = EmailTemplate(
-            os.path.join(os.path.dirname(__file__), 'alert.html'), 
-            subject=f"{num_farms} new Farms! {date} Farm Listing Alerts", 
-            cc = [username]
-        )
-
-        emails.append(template.fill(
-            template_args={
-                'NAME': contact['name'],
-                'DATE': date,
-                'FARMS': farms,
-                'URL': more_listings_url
-            },
-            to=contact['email']
-        ))
-
-    print_emails(emails)
-
+def send_emails(emails, gmail):
     for i, x in enumerate(gmail.send(emails)):
         if not x:
             logger.error(f'alert not sent to: {emails[i].to}')
+
+
+def create_email(contact, template, date, farms):
+    return template.fill(
+            template_args={
+                'NAME': contact['name'],
+                'DATE': date,
+                'FARMS': farms
+            },
+            to=contact['email'],
+            subject=f"{len(farms)} new Farms! {date} Farm Listing Alerts"
+        )
+
+
+def get_farms():
+    ip = os.environ['DATABASE_IP']
+    ssh_user = os.environ['SSH_USER']
+    ssh_pkey = os.environ['SSH_PKEY']
+    mongo_user = os.environ['MONGO_USER']
+    mongo_pass = os.environ['MONGO_PASS']
+    # print(ip, ssh_user, ssh_pkey, mongo_user, mongo_pass)
+
+    db = MongoDBTunnel(ip, ssh_user, ssh_pkey, mongo_user, mongo_pass)
+    return db['scraper']
+
+
+def login_gmail():
+    username = os.environ.get('ALERT_USERNAME') or input("Enter username: ")
+    password = os.environ.get('ALERT_PASSWORD') or getpass.getpass(f'Enter password for {username}: ')
+
+    return username, Gmail(username, password, TESTING)
 
 
 if __name__ == '__main__':

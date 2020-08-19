@@ -3,6 +3,11 @@ from .util import get_logger, render_template, assert_string, assert_string_list
 
 logger = get_logger(__name__)
 
+def check_kwargs(kwargs, acceptable_args):
+    for field in kwargs:
+        assert field in acceptable_args, f'bad argument {field}'
+
+
 class EmailTemplate:
     """ this class makes it easy to load and render email templates """
     def __init__(self, path, **kwargs):
@@ -14,8 +19,7 @@ class EmailTemplate:
         self.path = path
         assert os.path.isfile(self.path)
 
-        for field in kwargs:
-            assert field in ['subject', 'inline_attachments', 'attachments', 'to', 'cc']
+        check_kwargs(kwargs, ['subject', 'inline_attachments', 'attachments', 'to', 'cc', 'template_args'])
 
         self.args = kwargs
 
@@ -25,8 +29,14 @@ class EmailTemplate:
             @input kwargs any of subject, attachments, to, cc, inline_attachments
                 kwargs must contain subject and to in either __init__() or fill()
         """
-        for field in kwargs:
-            assert field in ['subject', 'inline_attachments', 'attachments', 'to', 'cc']
+        
+        try:
+            # override default template_args
+            template_args = {{ **self.template_args, **template_args }}
+        except:
+            pass
+
+        check_kwargs(kwargs, ['subject', 'inline_attachments', 'attachments', 'to', 'cc'])
 
         args = {**self.args, **kwargs}
         args['html'] = render_template(self.path, template_args)
