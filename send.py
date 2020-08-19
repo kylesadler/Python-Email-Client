@@ -18,7 +18,9 @@ TESTING = True
 
 def main():
     
-    scraper_farms = get_farms()
+    db = get_db()
+    scraper_farms = db['scraper']
+
     username, gmail = login_gmail()
 
     template = EmailTemplate(
@@ -62,14 +64,16 @@ def main():
 
     emails = []
     for contact in contacts:
+        logger.info(f'finding alerts for {contact["email"]}')
         alerts = get_alerts(scraper_farms, current_time, contact['alert_sites'])
 
         if len(alerts) == 0:
-            logger.info(f'no new alerts found for {contact["email"]}. Skipping...')
+            logger.warning(f'no new alerts found for {contact["email"]}. skipping...')
         else:
+            logger.info(f'{len(alerts)} new alerts found for {contact["email"]}')
             emails.append(create_email(contact, template, current_date, alerts))
     
-    if TESTING:
+    if TESTING and len(emails) > 0:
         print_emails(emails)
 
     send_emails(emails, gmail)
@@ -80,7 +84,7 @@ def main():
 def get_query(alert_sites): # TODO check this
     """ given a list of sites, return a mongodb query to find farms from those sites """
     query = { "$or" : [{ "url" : { "$regex": site } } for site in alert_sites] }
-    logger.info(f'querying {query}')
+    logger.debug(f'querying alerts for {alert_sites}')
     return query
 
 
@@ -133,7 +137,7 @@ def create_email(contact, template, date, farms):
         )
 
 
-def get_farms():
+def get_db():
     ip = os.environ['DATABASE_IP']
     ssh_user = os.environ['SSH_USER']
     ssh_pkey = os.environ['SSH_PKEY']
@@ -142,7 +146,8 @@ def get_farms():
     # print(ip, ssh_user, ssh_pkey, mongo_user, mongo_pass)
 
     db = MongoDBTunnel(ip, ssh_user, ssh_pkey, mongo_user, mongo_pass)
-    return db['scraper']
+    # return db['scraper']
+    return db
 
 
 def login_gmail():
