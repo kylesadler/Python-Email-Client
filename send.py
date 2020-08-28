@@ -1,5 +1,6 @@
 import os
 import getpass
+import requests
 import functools
 from datetime import datetime, timezone, timedelta
 from pprint import pprint, pformat
@@ -18,15 +19,19 @@ TESTING = True
 
 def main():
     
-    db = get_db()
+    db = get_remote_db()
     scraper_farms = db['scraper']
 
     username, gmail = login_gmail()
 
+    get_listings_url = "http://comptool.acretrader.com/listing-alerts"
+
+    post_listings_url = "http://comptool.acretrader.com/api/postAlerts"
+
     template = EmailTemplate(
         os.path.join(os.path.dirname(__file__), 'alert.html'), 
         cc = [username],
-        template_args={ 'URL': "http://comptool.acretrader.com/listing-alerts" }
+        template_args={ 'URL': get_listings_url }
     )
 
     alert_sites = [
@@ -71,6 +76,11 @@ def main():
             logger.warning(f'no new alerts found for {contact["email"]}. skipping...')
         else:
             logger.info(f'{len(alerts)} new alerts found for {contact["email"]}')
+            post_data(post_listings_url, alerts)
+            
+            if len(alerts) > 10:
+                alerts = alerts[:10]
+            
             emails.append(create_email(contact, template, current_date, alerts))
     
     if TESTING and len(emails) > 0:
@@ -80,8 +90,18 @@ def main():
 
 
 
+def post_data(url, alerts):
+    """ posts data to url and logs any errors """
 
-def get_query(alert_sites): # TODO check this
+    data = {'api_key' : os.environ['ALERT_API_KEY'], 'farms' : alerts}
+
+    response = requests.post(url, data=data)
+    if response.status != 200:
+        response_dict = { x: getattr(res, x) for x in dir(res) if '_' != x[0] } # all non-private attributes
+        logger.error(f'recieved response {pformat(response_dict)}')
+
+
+def get_query(alert_sites):
     """ given a list of sites, return a mongodb query to find farms from those sites """
     query = { "$or" : [{ "url" : { "$regex": site } } for site in alert_sites] }
     logger.debug(f'querying alerts for {alert_sites}')
@@ -95,14 +115,14 @@ def get_alerts(collection, current_time, alert_sites):
         alert_sites is a list of websites to get new farms from
     """
     alerts = []
+    required_fields = ['url', 'state', 'county', 'price', 'acres']
 
     for farm in collection.find(get_query(alert_sites)):
         
         # pass over farms older than 1 day based on 
         if (current_time - farm['_id'].generation_time).days > 0:
             continue
-
-        required_fields = ['url', 'state', 'county', 'price', 'acres']
+        
         if not all_fields_exist(required_fields, farm):
             logger.error(f"farm missing one of {required_fields}:\n{pformat(farm)}")
             continue
@@ -137,7 +157,7 @@ def create_email(contact, template, date, farms):
         )
 
 
-def get_db():
+def get_remote_db():
     ip = os.environ['DATABASE_IP']
     ssh_user = os.environ['SSH_USER']
     ssh_pkey = os.environ['SSH_PKEY']
@@ -146,7 +166,6 @@ def get_db():
     # print(ip, ssh_user, ssh_pkey, mongo_user, mongo_pass)
 
     db = MongoDBTunnel(ip, ssh_user, ssh_pkey, mongo_user, mongo_pass)
-    # return db['scraper']
     return db
 
 
