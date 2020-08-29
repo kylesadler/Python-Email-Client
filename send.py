@@ -14,8 +14,8 @@ from pymail.util.at_util import MongoDBTunnel
 
 logger = get_logger(__name__)
 
-# TESTING = False
-TESTING = True
+TESTING = False
+# TESTING = True
 
 
 def main():
