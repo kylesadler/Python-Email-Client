@@ -1,4 +1,5 @@
 import os
+import json
 import getpass
 import requests
 import functools
@@ -27,6 +28,7 @@ def main():
     get_listings_url = "http://comptool.acretrader.com/listing-alerts"
 
     post_listings_url = "http://comptool.acretrader.com/api/postAlerts"
+    # post_listings_url = "http://127.0.0.1:3000/api/postAlerts"
 
     template = EmailTemplate(
         os.path.join(os.path.dirname(__file__), 'alert.html'), 
@@ -76,6 +78,7 @@ def main():
             logger.warning(f'no new alerts found for {contact["email"]}. skipping...')
         else:
             logger.info(f'{len(alerts)} new alerts found for {contact["email"]}')
+            logger.debug(pformat(alerts))
             post_data(post_listings_url, alerts)
             
             if len(alerts) > 10:
@@ -90,15 +93,18 @@ def main():
 
 
 
-def post_data(url, alerts):
+def post_data(url, alerts): # this replaces ALL alerts (needs to change if multiple ppl on email list)
     """ posts data to url and logs any errors """
 
-    data = {'api_key' : os.environ['ALERT_API_KEY'], 'farms' : alerts}
-
-    response = requests.post(url, data=data)
-    if response.status != 200:
-        response_dict = { x: getattr(res, x) for x in dir(res) if '_' != x[0] } # all non-private attributes
+    data = {'api_key': os.environ['ALERT_API_KEY'], 'farms': json.dumps(alerts)}
+    # this puts everything in the header b/c I can't get data to show up in body for some reason
+    response = requests.post(url, params=data)
+    if response.status_code != 200:
+        # all non-private attributes
+        response_dict = { x: getattr(response, x) for x in dir(response) if '_' != x[0] }
         logger.error(f'recieved response {pformat(response_dict)}')
+
+    response.close()
 
 
 def get_query(alert_sites):
@@ -133,7 +139,7 @@ def get_alerts(collection, current_time, alert_sites):
             'url': farm['url'],
             'price': '${:0,.2f}'.format(farm['price']),
             'acres': farm['acres'],
-            'location': f'{farm["county"]} {get_county_type(state)}, {state}',
+            'location': f'{farm["county"].title()} {get_county_type(state)}, {state.upper()}',
         })
 
     return alerts

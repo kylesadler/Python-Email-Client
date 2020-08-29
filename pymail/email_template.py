@@ -46,7 +46,7 @@ class EmailTemplate:
 
 class Email:
     """ class storing all fields needed to send an email with an Gmail object """
-    def __init__(self, html, text, subject, to, cc=[], inline_attachments=[], attachments=[]):
+    def __init__(self, html, text, subject, to, cc=[], inline_attachments=[], attachments=[], **kwargs):
         self.html = html
         self.text = text
         self.subject = subject
