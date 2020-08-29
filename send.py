@@ -1,5 +1,6 @@
 import os
 import json
+import urllib3
 import getpass
 import requests
 import functools
@@ -11,6 +12,7 @@ from pymail.util import get_logger, print_emails
 from pymail.util.at_util.clean_parse import clean_html, parse_state, get_county_type
 from pymail.util.at_util.db import all_fields_exist
 from pymail.util.at_util import MongoDBTunnel
+
 
 logger = get_logger(__name__)
 
@@ -97,14 +99,17 @@ def post_data(url, alerts): # this replaces ALL alerts (needs to change if multi
     """ posts data to url and logs any errors """
 
     data = {'api_key': os.environ['ALERT_API_KEY'], 'farms': json.dumps(alerts)}
-    # this puts everything in the header b/c I can't get data to show up in body for some reason
-    response = requests.post(url, params=data)
-    if response.status_code != 200:
-        # all non-private attributes
-        response_dict = { x: getattr(response, x) for x in dir(response) if '_' != x[0] }
-        logger.error(f'recieved response {pformat(response_dict)}')
+    try: 
+        # this puts everything in the header b/c I can't get data to show up in body for some reason
+        response = requests.post(url, params=data)
+        if response.status_code != 200:
+            # all non-private attributes
+            response_dict = { x: getattr(response, x) for x in dir(response) if '_' != x[0] }
+            logger.error(f'recieved response {pformat(response_dict)}')
 
-    response.close()
+        response.close()
+    except urllib3.exceptions.ProtocolError:
+        logger.error(f'failed to post farms {pformat(alerts)}')
 
 
 def get_query(alert_sites):

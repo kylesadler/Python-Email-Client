@@ -1,5 +1,6 @@
 import os
 from .util import get_logger, render_template, assert_string, assert_string_list, clean_html
+from traceback import print_exc
 
 logger = get_logger(__name__)
 
@@ -32,10 +33,10 @@ class EmailTemplate:
         
         try:
             # override default template_args
-            template_args = {{ **self.template_args, **template_args }}
-        except:
+            template_args = { **self.args['template_args'], **template_args }
+        except KeyError:
             pass
-
+        
         check_kwargs(kwargs, ['subject', 'inline_attachments', 'attachments', 'to', 'cc'])
 
         args = {**self.args, **kwargs}
