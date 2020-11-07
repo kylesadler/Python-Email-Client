@@ -10,11 +10,11 @@ from email.mime.application import MIMEApplication
 
 logger = get_logger(__name__)
 
-class Gmail:
-    """ a wrapper class for sending emails with Gmail """
+class Outlook:
+    """ a wrapper class for sending emails with Outlook """
     def __init__(self, username, password, testing=True):
         self.username = username
-        self.smtp = self.connect(username, password)
+        self.smtp = connect(username, password)
         self.testing = testing
         
         if self.testing:
@@ -145,5 +145,5 @@ class Gmail:
         logger.info('exiting...')
 
     def connect(self, username, password):
-        logger.info('Connecting to Gmail smtp...')
-        return connect('smtp.gmail.com', username, password)
+        logger.info('Connecting to Outlook smtp...')
+        return connect('smtp.office365.com', username, password)

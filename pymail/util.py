@@ -6,7 +6,6 @@ from email import encoders
 from jinja2 import Template
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
-from .at_util import *
 
 
 formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s.py %(message)s')
@@ -65,22 +64,16 @@ def to_mime(path):
     mime.add_header('X-Attachment-Id', '0')
     return mime_img
 
-def connect(username, password):
+def connect(host, username, password, port=587):
     try:
-        logger.info('connecting to Gmail smtp...')
-
-        smtp = smtplib.SMTP(host='smtp.gmail.com', port=587)
+        smtp = smtplib.SMTP(host=host, port=port)
         smtp.ehlo()
         smtp.starttls()
         smtp.ehlo()
         smtp.login(username, password)
-        logger.info('sessfully connected to Gmail')
         return smtp
-
     except smtplib.SMTPException as e:
-        logger.error(f'Could not connect to Gmail:\n{e}')
-        raise RuntimeError
-
+        raise RuntimeError(f'Could not connect to {username}@{host}:{port}.\n{e}')
 
 
 def print_emails(emails):

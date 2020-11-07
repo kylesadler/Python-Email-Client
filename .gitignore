@@ -1,12 +1,3 @@
-/database
-scraper/proxies.txt
-IPs.json
-files/
-images/
-
-*.csv
-*_files/
-
 # Pycache files
 __pycache__/
  
