@@ -14,7 +14,7 @@ class Outlook:
     """ a wrapper class for sending emails with Outlook """
     def __init__(self, username, password, testing=True):
         self.username = username
-        self.smtp = connect(username, password)
+        self.smtp = self.connect(username, password)
         self.testing = testing
         
         if self.testing:
