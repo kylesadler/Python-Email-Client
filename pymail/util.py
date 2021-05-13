@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import logging
 import smtplib
@@ -83,3 +84,16 @@ def email_str(email):
     cc = ', '.join(email.cc)
     to = ', '.join(email.to)
     return f'subject: {email.subject}\nto: {to}\ncc: {cc}\n{email.text}'
+          
+html_cleaner = re.compile('<.*?>')
+def clean_html(html_string):
+    """ extracts a nicely-formatted string from raw html by removeing all html tags and special characters
+        input:
+            '<td>\n
+                Hinnerk Wolters
+                <a href="mailto:hinnerkwolters@hagemanrealty.com">hinnerkwolters@hagemanrealty.com</a>
+                <a href="tel:(219)%20261-2000">(219) 261-2000</a>
+            </td>'
+        output: 'Hinnerk Wolters hinnerkwolters@hagemanrealty.com (219) 261-2000'
+    """
+    return re.sub(html_cleaner, ' ', html_string).replace('&amp;', '&').replace('&nbsp;', ' ').replace('&gt;', '>').replace('\xa0',' ')
